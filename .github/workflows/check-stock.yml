@@ -1,0 +1,47 @@
+name: Amul stock check
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_notification:
+        description: "Send a test notification with the current status"
+        type: boolean
+        default: true
+
+concurrency:
+  group: stock-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Cache browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+      - run: python -m playwright install --with-deps chromium
+      - name: Check stock
+        run: python check_stock.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PINCODE: "632014"
+          PRODUCT_URL: "https://shop.amul.com/en/product/amul-high-protein-plain-lassi-200-ml-or-pack-of-30"
+          TEST_NOTIFY: ${{ github.event_name == 'workflow_dispatch' && inputs.test_notification }}
+      - name: Save screenshot
+        if: failure() || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: page-screenshot
+          path: page.png
+          retention-days: 3
